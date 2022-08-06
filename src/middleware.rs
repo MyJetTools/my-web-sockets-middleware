@@ -72,6 +72,14 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
         ctx: &mut HttpContext,
         get_next: &mut HttpServerRequestFlow,
     ) -> Result<HttpOkResult, HttpFailResult> {
+        if ctx
+            .request
+            .get_optional_header("Sec-WebSocket-Version")
+            .is_none()
+        {
+            return get_next.next(ctx).await;
+        }
+
         if ctx.request.get_path_lower_case() == self.path {
             return self.handle_web_socket_path(ctx);
         }
