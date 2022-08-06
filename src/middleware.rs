@@ -74,7 +74,7 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
     ) -> Result<HttpOkResult, HttpFailResult> {
         if ctx
             .request
-            .get_optional_header("Sec-WebSocket-Version")
+            .get_optional_header("sec-websocket-version")
             .is_none()
         {
             return get_next.next(ctx).await;
