@@ -39,13 +39,22 @@ impl MyWebSocketsMiddleware {
         ctx: &mut HttpContext,
     ) -> Result<HttpOkResult, HttpFailResult> {
         if let RequestData::AsRaw(req) = &mut ctx.request.req {
+            let query_string = if let Some(query_string) = req.uri().query() {
+                Some(query_string.to_string())
+            } else {
+                None
+            };
+
             match hyper_tungstenite::upgrade(req, None) {
                 Ok((response, websocket)) => {
                     let addr = ctx.request.addr;
                     let callback = self.callback.clone();
                     let id = self.get_socket_id().await;
+
                     tokio::spawn(async move {
-                        if let Err(e) = serve_websocket(id, websocket, callback, addr).await {
+                        if let Err(e) =
+                            serve_websocket(id, websocket, callback, addr, query_string).await
+                        {
                             eprintln!("Error in websocket connection: {}", e);
                         }
                     });
@@ -98,12 +107,13 @@ async fn serve_websocket(
     web_socket: HyperWebsocket,
     callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
     addr: SocketAddr,
+    query_string: Option<String>,
 ) -> Result<(), Error> {
     let websocket = web_socket.await?;
 
     let (write, mut read) = websocket.split();
 
-    let my_web_socket = MyWebSocket::new(id, write, addr);
+    let my_web_socket = MyWebSocket::new(id, write, addr, query_string);
 
     let my_web_socket = Arc::new(my_web_socket);
 
