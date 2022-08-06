@@ -11,16 +11,19 @@ use tokio::sync::Mutex;
 pub struct MyWebSocket {
     pub write_stream: Mutex<SplitSink<WebSocketStream<Upgraded>, Message>>,
     pub addr: SocketAddr,
+    pub id: i64,
 }
 
 impl MyWebSocket {
     pub fn new(
+        id: i64,
         write_stream: SplitSink<WebSocketStream<Upgraded>, Message>,
         addr: SocketAddr,
     ) -> Self {
         Self {
             write_stream: Mutex::new(write_stream),
             addr,
+            id,
         }
     }
 

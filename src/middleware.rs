@@ -9,12 +9,14 @@ use my_http_server::{
     HttpContext, HttpFailResult, HttpOkResult, HttpOutput, HttpServerMiddleware,
     HttpServerRequestFlow, RequestData, WebContentType,
 };
+use tokio::sync::Mutex;
 
 use crate::{MyWebSockeCallback, MyWebSocket, WebSocketMessage};
 
 pub struct MyWebSocketsMiddleware {
     path: String,
     callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
+    socket_id: Mutex<i64>,
 }
 
 impl MyWebSocketsMiddleware {
@@ -22,10 +24,17 @@ impl MyWebSocketsMiddleware {
         Self {
             path: path.to_string(),
             callback,
+            socket_id: Mutex::new(0),
         }
     }
 
-    fn handle_web_socket_path(
+    async fn get_socket_id(&self) -> i64 {
+        let mut socket_no = self.socket_id.lock().await;
+        *socket_no += 1;
+        *socket_no
+    }
+
+    async fn handle_web_socket_path(
         &self,
         ctx: &mut HttpContext,
     ) -> Result<HttpOkResult, HttpFailResult> {
@@ -34,8 +43,9 @@ impl MyWebSocketsMiddleware {
                 Ok((response, websocket)) => {
                     let addr = ctx.request.addr;
                     let callback = self.callback.clone();
+                    let id = self.get_socket_id().await;
                     tokio::spawn(async move {
-                        if let Err(e) = serve_websocket(websocket, callback, addr).await {
+                        if let Err(e) = serve_websocket(id, websocket, callback, addr).await {
                             eprintln!("Error in websocket connection: {}", e);
                         }
                     });
@@ -72,16 +82,10 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
         ctx: &mut HttpContext,
         get_next: &mut HttpServerRequestFlow,
     ) -> Result<HttpOkResult, HttpFailResult> {
-        if ctx
-            .request
-            .get_optional_header("sec-websocket-version")
-            .is_none()
-        {
-            return get_next.next(ctx).await;
-        }
-
-        if ctx.request.get_path_lower_case() == self.path {
-            return self.handle_web_socket_path(ctx);
+        if let Some(_) = ctx.request.get_optional_header("sec-websocket-key") {
+            if ctx.request.get_path_lower_case() == self.path {
+                return self.handle_web_socket_path(ctx).await;
+            }
         }
 
         get_next.next(ctx).await
@@ -90,6 +94,7 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
 
 /// Handle a websocket connection.
 async fn serve_websocket(
+    id: i64,
     web_socket: HyperWebsocket,
     callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
     addr: SocketAddr,
@@ -98,7 +103,7 @@ async fn serve_websocket(
 
     let (write, mut read) = websocket.split();
 
-    let my_web_socket = MyWebSocket::new(write, addr);
+    let my_web_socket = MyWebSocket::new(id, write, addr);
 
     let my_web_socket = Arc::new(my_web_socket);
 
