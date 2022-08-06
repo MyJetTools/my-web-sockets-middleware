@@ -1,9 +1,10 @@
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
-use futures::StreamExt;
+use futures::{stream::SplitStream, StreamExt};
+use hyper::upgrade::Upgraded;
 use hyper_tungstenite::{
     tungstenite::{Error, Message},
-    HyperWebsocket,
+    WebSocketStream,
 };
 use my_http_server::{
     HttpContext, HttpFailResult, HttpOkResult, HttpOutput, HttpServerMiddleware,
@@ -46,14 +47,31 @@ impl MyWebSocketsMiddleware {
             };
 
             match hyper_tungstenite::upgrade(req, None) {
-                Ok((response, websocket)) => {
-                    let addr = ctx.request.addr;
-                    let callback = self.callback.clone();
+                Ok((response, web_socket)) => {
+                    let websocket = match web_socket.await {
+                        Ok(result) => result,
+                        Err(err) => {
+                            return Err(HttpFailResult {
+                                content_type: WebContentType::Text,
+                                status_code: 400,
+                                content: format!("{:?}", err).into_bytes(),
+                                write_telemetry: false,
+                            });
+                        }
+                    };
+
+                    let (write, read_stream) = websocket.split();
+
                     let id = self.get_socket_id().await;
+                    let my_web_socket = MyWebSocket::new(id, write, ctx.request.addr, query_string);
+                    let my_web_socket = Arc::new(my_web_socket);
+
+                    self.callback.connected(my_web_socket.clone()).await?;
+
+                    let callback = self.callback.clone();
 
                     tokio::spawn(async move {
-                        if let Err(e) =
-                            serve_websocket(id, websocket, callback, addr, query_string).await
+                        if let Err(e) = serve_websocket(my_web_socket, read_stream, callback).await
                         {
                             eprintln!("Error in websocket connection: {}", e);
                         }
@@ -103,23 +121,11 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
 
 /// Handle a websocket connection.
 async fn serve_websocket(
-    id: i64,
-    web_socket: HyperWebsocket,
+    my_web_socket: Arc<MyWebSocket>,
+    mut read_stream: SplitStream<WebSocketStream<Upgraded>>,
     callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
-    addr: SocketAddr,
-    query_string: Option<String>,
 ) -> Result<(), Error> {
-    let websocket = web_socket.await?;
-
-    let (write, mut read) = websocket.split();
-
-    let my_web_socket = MyWebSocket::new(id, write, addr, query_string);
-
-    let my_web_socket = Arc::new(my_web_socket);
-
-    callback.connected(my_web_socket.clone()).await;
-
-    while let Some(message) = read.next().await {
+    while let Some(message) = read_stream.next().await {
         let result = match message? {
             Message::Text(msg) => {
                 send_message(
