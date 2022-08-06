@@ -12,17 +12,14 @@ use my_http_server::{
 
 use crate::{MyWebSockeCallback, MyWebSocket, WebSocketMessage};
 
-pub struct SocketIoMiddleware {
+pub struct MyWebSocketsMiddleware {
     path: String,
     callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
 }
 
-impl SocketIoMiddleware {
-    pub fn new(
-        path: &str,
-        callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
-    ) -> SocketIoMiddleware {
-        SocketIoMiddleware {
+impl MyWebSocketsMiddleware {
+    pub fn new(path: &str, callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>) -> Self {
+        Self {
             path: path.to_string(),
             callback,
         }
@@ -69,7 +66,7 @@ impl SocketIoMiddleware {
 }
 
 #[async_trait::async_trait]
-impl HttpServerMiddleware for SocketIoMiddleware {
+impl HttpServerMiddleware for MyWebSocketsMiddleware {
     async fn handle_request(
         &self,
         ctx: &mut HttpContext,
