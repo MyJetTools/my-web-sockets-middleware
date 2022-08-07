@@ -51,10 +51,12 @@ impl MyWebSocketsMiddleware {
                     let websocket = match web_socket.await {
                         Ok(result) => result,
                         Err(err) => {
+                            let content = format!("Can not upgrade websocket. Reason: {}", err);
+                            println!("{}", content);
                             return Err(HttpFailResult {
                                 content_type: WebContentType::Text,
                                 status_code: 400,
-                                content: format!("{:?}", err).into_bytes(),
+                                content: content.into_bytes(),
                                 write_telemetry: false,
                             });
                         }
