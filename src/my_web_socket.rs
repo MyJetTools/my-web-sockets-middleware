@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::atomic::AtomicBool};
 
 use futures::{stream::SplitSink, SinkExt};
 use hyper::upgrade::Upgraded;
@@ -14,6 +14,7 @@ pub struct MyWebSocket {
     pub addr: SocketAddr,
     pub id: i64,
     query_string: Option<String>,
+    connected: AtomicBool,
 }
 
 impl MyWebSocket {
@@ -28,6 +29,7 @@ impl MyWebSocket {
             addr,
             id,
             query_string,
+            connected: AtomicBool::new(true),
         }
     }
 
@@ -64,11 +66,17 @@ impl MyWebSocket {
     pub async fn disconnect(&self) {
         let mut write_access = self.write_stream.lock().await;
         if let Some(mut item) = write_access.take() {
+            self.connected
+                .store(true, std::sync::atomic::Ordering::SeqCst);
             let result = item.close().await;
 
             if let Err(err) = result {
                 println!("Can not close websocket {}. Reason: {:?}", self.id, err);
             }
         }
+    }
+
+    pub fn is_connected(&self) -> bool {
+        self.connected.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
