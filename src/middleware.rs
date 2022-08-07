@@ -63,32 +63,34 @@ impl MyWebSocketsMiddleware {
 
             let (response, web_socket) = upgrade_result.unwrap();
 
-            let web_socket = web_socket.await;
-
-            if let Err(err) = web_socket {
-                let content = format!("web_socket.await Error. Reason: {}", err);
-                println!("{}", content);
-                return Err(HttpFailResult {
-                    content_type: WebContentType::Text,
-                    status_code: 400,
-                    content: content.into_bytes(),
-                    write_telemetry: false,
-                });
-            }
-
-            let (write, read_stream) = web_socket.unwrap().split();
-
-            let id = self.get_socket_id().await;
-            let my_web_socket = MyWebSocket::new(id, write, ctx.request.addr, query_string);
-            let my_web_socket = Arc::new(my_web_socket);
-
-            self.callback.connected(my_web_socket.clone()).await?;
-
             let callback = self.callback.clone();
+            let id = self.get_socket_id().await;
+            let addr = ctx.request.addr;
 
             tokio::spawn(async move {
-                if let Err(e) = serve_websocket(my_web_socket, read_stream, callback).await {
-                    eprintln!("Error in websocket connection: {}", e);
+                let web_socket = web_socket.await.unwrap();
+
+                let (write, read_stream) = web_socket.split();
+
+                let my_web_socket = MyWebSocket::new(id, write, addr, query_string);
+                let my_web_socket = Arc::new(my_web_socket);
+
+                callback.connected(my_web_socket.clone()).await.unwrap();
+
+                let serve_socket_result = tokio::spawn(serve_websocket(
+                    my_web_socket.clone(),
+                    read_stream,
+                    callback.clone(),
+                ))
+                .await;
+
+                callback.disconnected(my_web_socket.clone()).await;
+
+                if let Err(err) = serve_socket_result {
+                    println!(
+                        "Execution of websocket {} is finished with panic. {}",
+                        id, err
+                    );
                 }
             });
 
@@ -159,8 +161,6 @@ async fn serve_websocket(
             break;
         }
     }
-
-    callback.disconnected(my_web_socket.clone()).await;
 
     Ok(())
 }
