@@ -48,8 +48,6 @@ impl MyWebSocketsMiddleware {
 
             let upgrade_result = hyper_tungstenite::upgrade(req, None);
 
-            println!("Upgrade result: {:?}", upgrade_result);
-
             if let Err(err) = upgrade_result {
                 let content = format!("Can not upgrade websocket. Reason: {}", err);
                 println!("{}", content);
