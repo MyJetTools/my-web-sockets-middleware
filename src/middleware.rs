@@ -50,53 +50,52 @@ impl MyWebSocketsMiddleware {
 
             println!("Upgrade result: {:?}", upgrade_result);
 
-            match upgrade_result {
-                Ok((response, web_socket)) => {
-                    let websocket = match web_socket.await {
-                        Ok(result) => result,
-                        Err(err) => {
-                            let content = format!("Can not upgrade websocket. Reason: {}", err);
-                            println!("{}", content);
-                            return Err(HttpFailResult {
-                                content_type: WebContentType::Text,
-                                status_code: 400,
-                                content: content.into_bytes(),
-                                write_telemetry: false,
-                            });
-                        }
-                    };
-
-                    let (write, read_stream) = websocket.split();
-
-                    let id = self.get_socket_id().await;
-                    let my_web_socket = MyWebSocket::new(id, write, ctx.request.addr, query_string);
-                    let my_web_socket = Arc::new(my_web_socket);
-
-                    self.callback.connected(my_web_socket.clone()).await?;
-
-                    let callback = self.callback.clone();
-
-                    tokio::spawn(async move {
-                        if let Err(e) = serve_websocket(my_web_socket, read_stream, callback).await
-                        {
-                            eprintln!("Error in websocket connection: {}", e);
-                        }
-                    });
-
-                    return Ok(HttpOkResult {
-                        write_telemetry: false,
-                        output: HttpOutput::Raw(response),
-                    });
-                }
-                Err(err) => {
-                    return Err(HttpFailResult {
-                        content_type: WebContentType::Text,
-                        status_code: 400,
-                        content: format!("{}", err).into_bytes(),
-                        write_telemetry: false,
-                    });
-                }
+            if let Err(err) = upgrade_result {
+                let content = format!("Can not upgrade websocket. Reason: {}", err);
+                println!("{}", content);
+                return Err(HttpFailResult {
+                    content_type: WebContentType::Text,
+                    status_code: 400,
+                    content: content.into_bytes(),
+                    write_telemetry: false,
+                });
             }
+
+            let (response, web_socket) = upgrade_result.unwrap();
+
+            let web_socket = web_socket.await;
+
+            if let Err(err) = web_socket {
+                let content = format!("web_socket.await Error. Reason: {}", err);
+                println!("{}", content);
+                return Err(HttpFailResult {
+                    content_type: WebContentType::Text,
+                    status_code: 400,
+                    content: content.into_bytes(),
+                    write_telemetry: false,
+                });
+            }
+
+            let (write, read_stream) = web_socket.unwrap().split();
+
+            let id = self.get_socket_id().await;
+            let my_web_socket = MyWebSocket::new(id, write, ctx.request.addr, query_string);
+            let my_web_socket = Arc::new(my_web_socket);
+
+            self.callback.connected(my_web_socket.clone()).await?;
+
+            let callback = self.callback.clone();
+
+            tokio::spawn(async move {
+                if let Err(e) = serve_websocket(my_web_socket, read_stream, callback).await {
+                    eprintln!("Error in websocket connection: {}", e);
+                }
+            });
+
+            return Ok(HttpOkResult {
+                write_telemetry: false,
+                output: HttpOutput::Raw(response),
+            });
         }
 
         return Err(HttpFailResult {
