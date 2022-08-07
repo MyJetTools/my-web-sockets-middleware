@@ -65,7 +65,7 @@ impl MyWebSocket {
 
     pub async fn disconnect(&self) {
         self.connected
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         let mut write_access = self.write_stream.lock().await;
         if let Some(mut item) = write_access.take() {
             let result = item.close().await;
