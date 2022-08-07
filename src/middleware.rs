@@ -109,8 +109,6 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
         ctx: &mut HttpContext,
         get_next: &mut HttpServerRequestFlow,
     ) -> Result<HttpOkResult, HttpFailResult> {
-        println!("{:?}", ctx.request.get_headers());
-
         if let Some(_) = ctx.request.get_optional_header("sec-websocket-key") {
             if ctx.request.get_path_lower_case() == self.path {
                 return self.handle_web_socket_path(ctx).await;
