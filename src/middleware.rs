@@ -46,7 +46,11 @@ impl MyWebSocketsMiddleware {
                 None
             };
 
-            match hyper_tungstenite::upgrade(req, None) {
+            let upgrade_result = hyper_tungstenite::upgrade(req, None);
+
+            println!("Upgrade result: {:?}", upgrade_result);
+
+            match upgrade_result {
                 Ok((response, web_socket)) => {
                     let websocket = match web_socket.await {
                         Ok(result) => result,
