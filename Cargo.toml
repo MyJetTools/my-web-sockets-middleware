@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 my-http-server = { branch = "0.2.6", git = "https://github.com/MyJetTools/my-http-server.git" }
+my-http-server-web-sockets = { branch = "0.1.0", git = "https://github.com/MyJetTools/my-http-server-web-sockets.git" }
 tokio = { version = "*", features = ["full"] }
 async-trait = "*"
 hyper = { version = "*", features = ["full"] }
