@@ -4,17 +4,23 @@ use my_http_server::{
     HttpContext, HttpFailResult, HttpOkResult, HttpServerMiddleware, HttpServerRequestFlow,
     RequestData,
 };
-use my_http_server_web_sockets::MyWebSockeCallback;
+use my_http_server_web_sockets::MyWebSocketCallback;
 use tokio::sync::Mutex;
 
-pub struct MyWebSocketsMiddleware {
+pub struct MyWebSocketsMiddleware<TMyWebSocketCallback>
+where
+    TMyWebSocketCallback: MyWebSocketCallback + Send + Sync + 'static,
+{
     path: String,
-    callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>,
+    callback: Arc<TMyWebSocketCallback>,
     socket_id: Mutex<i64>,
 }
 
-impl MyWebSocketsMiddleware {
-    pub fn new(path: &str, callback: Arc<dyn MyWebSockeCallback + Send + Sync + 'static>) -> Self {
+impl<TMyWebSocketCallback: MyWebSocketCallback> MyWebSocketsMiddleware<TMyWebSocketCallback>
+where
+    TMyWebSocketCallback: MyWebSocketCallback + Send + Sync + 'static,
+{
+    pub fn new(path: &str, callback: Arc<TMyWebSocketCallback>) -> Self {
         Self {
             path: path.to_string(),
             callback,
@@ -30,7 +36,11 @@ impl MyWebSocketsMiddleware {
 }
 
 #[async_trait::async_trait]
-impl HttpServerMiddleware for MyWebSocketsMiddleware {
+impl<TMyWebSocketCallback: MyWebSocketCallback> HttpServerMiddleware
+    for MyWebSocketsMiddleware<TMyWebSocketCallback>
+where
+    TMyWebSocketCallback: MyWebSocketCallback + Send + Sync + 'static,
+{
     async fn handle_request(
         &self,
         ctx: &mut HttpContext,
@@ -46,7 +56,7 @@ impl HttpServerMiddleware for MyWebSocketsMiddleware {
                     let id = self.get_socket_id().await;
                     return my_http_server_web_sockets::handle_web_socket_upgrade(
                         request,
-                        &self.callback,
+                        self.callback.clone(),
                         id,
                         ctx.request.addr,
                     )
