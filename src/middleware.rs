@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use my_http_server::{
-    HttpContext, HttpFailResult, HttpOkResult, HttpServerMiddleware, HttpServerRequestFlow,
-    RequestData,
+    HttpContext, HttpFailResult, HttpOkResult, HttpPath, HttpServerMiddleware,
+    HttpServerRequestFlow, RequestData,
 };
 use my_http_server_web_sockets::MyWebSocketCallback;
 use tokio::sync::Mutex;
@@ -11,7 +11,7 @@ pub struct MyWebSocketsMiddleware<TMyWebSocketCallback>
 where
     TMyWebSocketCallback: MyWebSocketCallback + Send + Sync + 'static,
 {
-    path: String,
+    path: HttpPath,
     callback: Arc<TMyWebSocketCallback>,
     socket_id: Mutex<i64>,
 }
@@ -22,7 +22,7 @@ where
 {
     pub fn new(path: &str, callback: Arc<TMyWebSocketCallback>) -> Self {
         Self {
-            path: path.to_string(),
+            path: HttpPath::new(path),
             callback,
             socket_id: Mutex::new(0),
         }
@@ -51,7 +51,7 @@ where
             .get_optional_header("sec-websocket-key")
             .is_some()
         {
-            if ctx.request.get_path_lower_case() == self.path {
+            if ctx.request.http_path.is_the_same_to(&self.path) {
                 if let RequestData::AsRaw(request) = &mut ctx.request.req {
                     let id = self.get_socket_id().await;
                     return my_http_server_web_sockets::handle_web_socket_upgrade(
