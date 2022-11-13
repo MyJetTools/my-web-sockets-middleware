@@ -22,7 +22,7 @@ where
 {
     pub fn new(path: &str, callback: Arc<TMyWebSocketCallback>) -> Self {
         Self {
-            path: HttpPath::new(path),
+            path: HttpPath::from_str(path),
             callback,
             socket_id: Mutex::new(0),
         }
